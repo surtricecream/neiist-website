@@ -234,7 +234,7 @@ CREATE SEQUENCE neiist.order_sequence;
 CREATE OR REPLACE FUNCTION neiist.generate_order_number()
 RETURNS TEXT AS $$
 BEGIN
-  RETURN 'ORD-' || to_char(NOW(), 'YYYY') || LPAD(nextval('neiist.order_sequence')::TEXT, 6, '0');
+  RETURN 'ORD-' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSUS') || LPAD(nextval('neiist.order_sequence')::TEXT, 6, '0');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -249,6 +249,7 @@ CREATE TABLE neiist.orders (
   total_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
   payment_method TEXT,
   payment_reference TEXT,
+  created_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   paid_at TIMESTAMPTZ,
   payment_checked_by TEXT,
@@ -270,6 +271,67 @@ CREATE TABLE neiist.order_items (
   unit_price NUMERIC(10,2) NOT NULL,
   total_price NUMERIC(10,2) NOT NULL
 );
+
+--Triggers
+
+--Resotck Limited stock items on order cancellation
+CREATE OR REPLACE FUNCTION neiist.restock_limited_items_on_order_cancel()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Defensive guard (trigger WHEN already enforces this transition)
+  IF OLD.status = NEW.status OR NEW.status <> 'cancelled' THEN
+    RETURN NEW;
+  END IF;
+
+  -- Restock product variants (limited stock only, items with variant_id)
+  UPDATE neiist.product_variants AS product_variant
+  SET stock_quantity = COALESCE(product_variant.stock_quantity, 0) + variant_restock.quantity_to_restock,
+      updated_at = NOW()
+  FROM (
+    SELECT
+      order_item.product_id AS product_id,
+      order_item.variant_id AS variant_id,
+      SUM(order_item.quantity)::INTEGER AS quantity_to_restock
+    FROM neiist.order_items AS order_item
+    JOIN neiist.products AS product
+      ON product.id = order_item.product_id
+    WHERE order_item.order_id = NEW.id
+      AND order_item.variant_id IS NOT NULL
+      AND product.stock_type = 'limited'
+    GROUP BY order_item.product_id, order_item.variant_id
+  ) AS variant_restock
+  WHERE product_variant.id = variant_restock.variant_id
+    AND product_variant.product_id = variant_restock.product_id;
+
+  -- Restock base products (limited stock only, items without variant_id)
+  UPDATE neiist.products AS product
+  SET stock_quantity = COALESCE(product.stock_quantity, 0) + product_restock.quantity_to_restock
+  FROM (
+    SELECT
+      order_item.product_id AS product_id,
+      SUM(order_item.quantity)::INTEGER AS quantity_to_restock
+    FROM neiist.order_items AS order_item
+    JOIN neiist.products AS product_for_filter
+      ON product_for_filter.id = order_item.product_id
+    WHERE order_item.order_id = NEW.id
+      AND order_item.variant_id IS NULL
+      AND product_for_filter.stock_type = 'limited'
+    GROUP BY order_item.product_id
+  ) AS product_restock
+  WHERE product.id = product_restock.product_id;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_restock_limited_on_cancel
+AFTER UPDATE OF status ON neiist.orders
+FOR EACH ROW
+WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'cancelled')
+EXECUTE FUNCTION neiist.restock_limited_items_on_order_cancel();
 
 -- FUNCTIONS
 
@@ -1526,6 +1588,7 @@ CREATE OR REPLACE FUNCTION neiist.new_order(
   p_notes TEXT,
   p_payment_method TEXT,
   p_payment_reference TEXT,
+  p_created_by TEXT,
   p_items JSONB
 ) RETURNS TABLE (
   id INTEGER,
@@ -1541,6 +1604,7 @@ CREATE OR REPLACE FUNCTION neiist.new_order(
   total_amount NUMERIC(10,2),
   payment_method TEXT,
   payment_reference TEXT,
+  created_by TEXT,
   created_at TIMESTAMPTZ,
   paid_at TIMESTAMPTZ,
   payment_checked_by TEXT,
@@ -1566,8 +1630,24 @@ DECLARE
   v_v_label TEXT;
   v_v_opts JSONB;
 BEGIN
-  INSERT INTO neiist.orders(user_istid, nif, campus, notes, payment_method, payment_reference)
-  VALUES (p_user_istid, p_nif, p_campus, p_notes, p_payment_method, p_payment_reference)
+  INSERT INTO neiist.orders(
+    user_istid,
+    nif,
+    campus,
+    notes,
+    payment_method,
+    payment_reference,
+    created_by
+  )
+  VALUES (
+    p_user_istid,
+    p_nif,
+    p_campus,
+    p_notes,
+    p_payment_method,
+    p_payment_reference,
+    p_created_by
+  )
   RETURNING orders.id INTO v_order_id;
 
   FOR it IN SELECT * FROM jsonb_array_elements(p_items)
@@ -1688,6 +1768,7 @@ BEGIN
       WHERE oi.order_id = o.id
     ), '[]'::JSONB) AS items,
     o.notes, o.total_amount, o.payment_method, o.payment_reference,
+    o.created_by,
     o.created_at, o.paid_at, o.payment_checked_by, o.delivered_at, o.delivered_by, o.updated_at,
     o.status::TEXT
   FROM neiist.orders o
@@ -1712,6 +1793,7 @@ RETURNS TABLE (
   total_amount NUMERIC(10,2),
   payment_method TEXT,
   payment_reference TEXT,
+  created_by TEXT,
   created_at TIMESTAMPTZ,
   paid_at TIMESTAMPTZ,
   payment_checked_by TEXT,
@@ -1757,6 +1839,7 @@ BEGIN
     o.total_amount,
     o.payment_method,
     o.payment_reference,
+    o.created_by,
     o.created_at,
     o.paid_at,
     o.payment_checked_by,
@@ -1788,6 +1871,7 @@ CREATE OR REPLACE FUNCTION neiist.update_order(
   total_amount NUMERIC(10,2),
   payment_method TEXT,
   payment_reference TEXT,
+  created_by TEXT,
   created_at TIMESTAMPTZ,
   paid_at TIMESTAMPTZ,
   payment_checked_by TEXT,
@@ -1829,6 +1913,9 @@ BEGIN
   END IF;
   IF p_updates ? 'payment_reference' THEN
     UPDATE neiist.orders SET payment_reference = p_updates->>'payment_reference' WHERE neiist.orders.id = p_order_id;
+  END IF;
+  IF p_updates ? 'created_by' THEN
+    UPDATE neiist.orders SET created_by = NULLIF(p_updates->>'created_by','') WHERE neiist.orders.id = p_order_id;
   END IF;
   IF p_updates ? 'payment_checked_by' THEN
     UPDATE neiist.orders SET payment_checked_by = NULLIF(p_updates->>'payment_checked_by','') WHERE neiist.orders.id = p_order_id;
@@ -1977,6 +2064,7 @@ BEGIN
     g.total_amount,
     g.payment_method,
     g.payment_reference,
+    g.created_by,
     g.created_at,
     g.paid_at,
     g.payment_checked_by,
@@ -2008,6 +2096,7 @@ CREATE OR REPLACE FUNCTION neiist.set_order_state(
   total_amount NUMERIC(10,2),
   payment_method TEXT,
   payment_reference TEXT,
+  created_by TEXT,
   created_at TIMESTAMPTZ,
   paid_at TIMESTAMPTZ,
   payment_checked_by TEXT,
@@ -2041,6 +2130,7 @@ BEGIN
     g.total_amount,
     g.payment_method,
     g.payment_reference,
+    g.created_by,
     g.created_at,
     g.paid_at,
     g.payment_checked_by,
