@@ -63,11 +63,13 @@ export interface Order {
   customer_phone?: string;
   customer_nif?: string;
   campus?: string;
+  pickup_deadline?: string | null;
   items: OrderItem[];
   notes?: string;
   total_amount: number;
   payment_method?: PaymentMethod;
   payment_reference?: string;
+  created_by?: string;
   created_at: string;
   paid_at?: string;
   payment_checked_by?: string;
@@ -128,11 +130,13 @@ export interface dbOrder {
   customer_phone: string | null;
   customer_nif: string | null;
   campus: string | null;
+  pickup_deadline: string | null;
   items: dbOrderItem[] | null;
   notes: string | null;
   total_amount: string | number;
   payment_method: string | null;
   payment_reference: string | null;
+  created_by: string | null;
   created_at: string;
   paid_at: string | null;
   payment_checked_by: string | null;
@@ -246,6 +250,7 @@ export function mapdbOrderToOrder(row: dbOrder): Order {
     customer_phone: row.customer_phone ?? undefined,
     customer_nif: row.customer_nif ?? undefined,
     campus: row.campus ?? undefined,
+    pickup_deadline: row.pickup_deadline ?? undefined,
     items: (row.items ?? []).map(
       (it): OrderItem => ({
         product_id: it.product_id,
@@ -262,6 +267,7 @@ export function mapdbOrderToOrder(row: dbOrder): Order {
     total_amount: Number(row.total_amount),
     payment_method: (row.payment_method as PaymentMethod) ?? undefined,
     payment_reference: row.payment_reference ?? undefined,
+    created_by: row.created_by ?? undefined,
     created_at: row.created_at,
     paid_at: row.paid_at ?? undefined,
     payment_checked_by: row.payment_checked_by ?? undefined,
