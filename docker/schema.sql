@@ -263,8 +263,8 @@ CREATE TABLE neiist.orders (
 CREATE TABLE neiist.order_items (
   id SERIAL PRIMARY KEY,
   order_id INTEGER NOT NULL REFERENCES neiist.orders(id) ON DELETE CASCADE,
-  product_id INTEGER NOT NULL REFERENCES neiist.products(id),
-  variant_id INTEGER REFERENCES neiist.product_variants(id),
+  product_id INTEGER REFERENCES neiist.products(id) ON DELETE SET NULL,
+  variant_id INTEGER REFERENCES neiist.product_variants(id) ON DELETE SET NULL,
   product_name TEXT NOT NULL,
   variant_label TEXT,
   variant_options JSONB,
@@ -272,6 +272,9 @@ CREATE TABLE neiist.order_items (
   unit_price NUMERIC(10,2) NOT NULL,
   total_price NUMERIC(10,2) NOT NULL
 );
+
+-- Index for better search performance of products on orders
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON neiist.order_items(product_id);
 
 --Triggers
 
@@ -333,6 +336,30 @@ AFTER UPDATE OF status ON neiist.orders
 FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'cancelled')
 EXECUTE FUNCTION neiist.restock_limited_items_on_order_cancel();
+
+-- Update the name of products on orders
+CREATE OR REPLACE FUNCTION neiist.update_order_item_product_name_on_product_rename()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NEW.name IS DISTINCT FROM OLD.name THEN
+    UPDATE neiist.order_items oi
+    SET product_name = NEW.name
+    WHERE oi.product_id = NEW.id
+      AND oi.product_name = OLD.name;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_update_order_item_product_name_on_product_rename
+AFTER UPDATE OF name ON neiist.products
+FOR EACH ROW
+WHEN (OLD.name IS DISTINCT FROM NEW.name)
+EXECUTE FUNCTION neiist.update_order_item_product_name_on_product_rename();
 
 -- FUNCTIONS
 
@@ -1578,6 +1605,83 @@ BEGIN
     ), '') AS label
   FROM neiist.product_variants v
   WHERE v.id = p_variant_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Get all products including archived ones (admin view)
+CREATE OR REPLACE FUNCTION neiist.get_all_products_including_archived()
+RETURNS TABLE (
+  id INTEGER,
+  name TEXT,
+  description TEXT,
+  price NUMERIC(10,2),
+  images TEXT[],
+  category TEXT,
+  stock_type TEXT,
+  stock_quantity INTEGER,
+  order_deadline TIMESTAMPTZ,
+  active BOOLEAN,
+  variants JSONB
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    p.id, p.name, p.description, p.price, p.images,
+    c.name AS category,
+    p.stock_type::TEXT, p.stock_quantity, p.order_deadline,
+    p.active,
+    COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', v.id,
+          'sku', v.sku,
+          'images', v.images,
+          'price_modifier', v.price_modifier,
+          'stock_quantity', v.stock_quantity,
+          'active', v.active,
+          'options', COALESCE((
+              SELECT jsonb_object_agg(vo.option_name, vo.option_value)
+              FROM neiist.product_variant_options vo
+              WHERE vo.variant_id = v.id
+            ), '{}'::jsonb),
+          'label', NULLIF((
+              SELECT string_agg(vo.option_name || ': ' || vo.option_value, ' | ' ORDER BY vo.option_name)
+              FROM neiist.product_variant_options vo
+              WHERE vo.variant_id = v.id
+            ), '')
+        )
+        ORDER BY v.id
+      )
+      FROM neiist.product_variants v
+      WHERE v.product_id = p.id
+    ), '[]'::JSONB) AS variants
+  FROM neiist.products p
+  LEFT JOIN neiist.categories c ON c.id = p.category_id
+  ORDER BY p.active DESC, p.id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Permanently delete a product and all its variants (hard delete)
+CREATE OR REPLACE FUNCTION neiist.delete_product(p_product_id INTEGER)
+RETURNS VOID AS $$
+BEGIN
+  DELETE FROM neiist.products WHERE id = p_product_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Product % not found', p_product_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Permanently delete a single product variant (hard delete)
+CREATE OR REPLACE FUNCTION neiist.delete_product_variant(p_variant_id INTEGER)
+RETURNS VOID AS $$
+BEGIN
+  DELETE FROM neiist.product_variants WHERE id = p_variant_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Variant % not found', p_variant_id;
+  END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
