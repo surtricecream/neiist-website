@@ -1,4 +1,10 @@
 {
+  "navbar": {
+    "about_us": "Sobre Nós",
+    "activities": "Atividades",
+    "shop": "Loja"
+  },
+
   "about_us": {
     "hero": {
       "title_1": "Qu",

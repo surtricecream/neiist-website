@@ -1,8 +1,5 @@
 import { cookies } from "next/headers";
-
-export const locales = ["en", "pt"];
-export type Locale = (typeof locales)[number];
-export const defaultLocale = "en";
+import { locales, Locale, defaultLocale } from "./i18n-config";
 
 export async function getLocale(): Promise<Locale> {
   const cookieStore = await cookies();

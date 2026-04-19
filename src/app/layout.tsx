@@ -1,5 +1,4 @@
 import { ReactNode } from "react";
-import { Metadata } from "next";
 import { Secular_One } from "next/font/google";
 import NavBar from "@/components/layout/navbar/NavBar";
 import Footer from "@/components/layout/Footer";
@@ -7,9 +6,9 @@ import Cart from "@/components/shop/Cart";
 import { Toaster } from "sonner";
 import { UserProvider } from "@/context/UserContext";
 import { ShopProvider } from "@/context/ShopContext";
+import { getLocale, getDictionary } from "@/lib/i18n";
 import "@/styles/globals.css";
 import "@/styles/components/activities/ReactBigCalendar.css";
-import "@/lib/autoCancelScheduler";
 
 const secularOne = Secular_One({
   subsets: ["latin"],
@@ -18,7 +17,7 @@ const secularOne = Secular_One({
   display: "swap",
 });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "NEIIST",
   description: "Núcleo Estudantil de Informática do Instituto Superior Técnico",
 };
@@ -39,12 +38,15 @@ async function getInitialUser() {
 
 export default async function Layout({ children }: { children: ReactNode }) {
   const user = await getInitialUser();
+  const locale = await getLocale();
+  const dict = await getDictionary(locale);
+
   return (
-    <html lang="pt" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body className={secularOne.className}>
         <ShopProvider>
           <UserProvider initialUser={user}>
-            <NavBar />
+            <NavBar dict={dict.navbar} currentLocale={locale} />
             <Cart />
             <Toaster
               position="top-right"
@@ -52,7 +54,7 @@ export default async function Layout({ children }: { children: ReactNode }) {
               mobileOffset={{ top: "80px", right: "16px", left: "16px" }}
               toastOptions={{
                 style: {
-                  background: "white",
+                  background: "var(--background-colour)",
                   color: "var(--foreground-colour)",
                 },
               }}

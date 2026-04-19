@@ -1,1 +1,7 @@
-{}
+{
+  "navbar": {
+    "about_us": "About Us",
+    "activities": "Activities",
+    "shop": "Shop"
+  }
+}

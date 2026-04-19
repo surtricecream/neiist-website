@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+//import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import { login, logout } from "@/utils/userUtils";
@@ -10,21 +10,31 @@ import NeiistLogo from "@/components/layout/navbar/NeiistLogo";
 import ShoppingCart from "@/components/layout/navbar/ShoppingCart";
 import LoginButton from "@/components/layout/navbar/LoginButton";
 import UserMenu from "@/components/layout/navbar/UserMenu";
+import LanguageSwitcher from "@/components/layout/navbar/LanguageSwitcher";
+import { Locale } from "@/lib/i18n-config";
 import styles from "@/styles/components/layout/navbar/NavBar.module.css";
 
-const navLinks = [
-  { name: "Sobre Nós", href: "/about-us" },
-  { name: "Atividades", href: "/activities" },
-  /*{ name: "Blog", href: "/blog" },*/
-  { name: "Loja", href: "/shop" },
-];
+interface NavBarProps {
+  dict: {
+    about_us: string;
+    activities: string;
+    shop: string;
+  };
+  currentLocale: Locale;
+}
 
-export default function NavBar() {
-  const router = useRouter();
+export default function NavBar({ dict, currentLocale }: NavBarProps) {
+  //const router = useRouter();
   const { user, setUser } = useUser();
   const [isSticky, setIsSticky] = useState(false);
   const [menuState, setMenuState] = useState<"closed" | "open" | "closing">("closed");
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const navLinks = [
+    { name: dict.about_us, href: "/about-us" },
+    { name: dict.activities, href: "/activities" },
+    { name: dict.shop, href: "/shop" },
+  ];
 
   useEffect(() => {
     const onScroll = () => setIsSticky(window.scrollY > 0);
@@ -60,12 +70,12 @@ export default function NavBar() {
     setTimeout(() => setMenuState("closed"), 300);
   };
 
-  const handleMobileNavClick = (href: string) => {
-    closeMenu();
-    setTimeout(() => {
-      router.push(href);
-    }, 300);
-  };
+  //const handleMobileNavClick = (href: string) => {
+  //  closeMenu();
+  //  setTimeout(() => {
+  //    router.push(href);
+  //  }, 300);
+  //};
 
   const handleLogout = async () => {
     await logout();
@@ -98,6 +108,7 @@ export default function NavBar() {
         ) : (
           <LoginButton onClick={login} />
         )}
+        <LanguageSwitcher currentLocale={currentLocale} />
         <div className={styles.menuButton}>
           <Squash
             toggled={menuState === "open"}
@@ -108,16 +119,6 @@ export default function NavBar() {
           />
         </div>
       </div>
-      {(menuState === "open" || menuState === "closing") && (
-        <div
-          ref={menuRef}
-          className={`${styles.menu} ${menuState === "closing" ? styles.slideOut : ""}`}>
-          <Link href="/" className={styles.logo} onClick={() => handleMobileNavClick("/")}>
-            <NeiistLogo />
-          </Link>
-          <nav className={styles.navItems}>{renderNavItems(handleMobileNavClick)}</nav>
-        </div>
-      )}
     </header>
   );
 }
