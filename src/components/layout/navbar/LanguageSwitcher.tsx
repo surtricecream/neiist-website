@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { locales, Locale } from "@/lib/i18n-config";
+import styles from "@/styles/components/layout/navbar/LanguageSwitcher.module.css";
 
 export default function LanguageSwitcher({ currentLocale }: { currentLocale: Locale }) {
   const router = useRouter();
@@ -17,19 +18,10 @@ export default function LanguageSwitcher({ currentLocale }: { currentLocale: Loc
     <select
       value={currentLocale}
       onChange={(e) => switchLanguage(e.target.value as Locale)}
-      style={{
-        background: "transparent",
-        color: "var(--foreground-colour)",
-        border: "none",
-        cursor: "pointer",
-        outline: "none",
-        textTransform: "uppercase",
-        fontWeight: "bold",
-        marginLeft: "1rem",
-      }}>
+      className={styles.languageSwitcher}>
       {locales.map((locale) => (
-        <option key={locale} value={locale} style={{ color: "black" }}>
-          {locale}
+        <option key={locale} value={locale} className={styles.languageOption}>
+          {locale.toUpperCase()}
         </option>
       ))}
     </select>

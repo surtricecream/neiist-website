@@ -1,0 +1,16 @@
+.languageSwitcher {
+  background: transparent;
+  color: var(--foreground-colour);
+  border: none;
+  cursor: pointer;
+  outline: none;
+  text-transform: uppercase;
+  font-weight: bold;
+  margin-left: 1rem;
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.languageOption {
+  color: black;
+}
