@@ -102,13 +102,13 @@ export default function NavBar({ dict, currentLocale }: NavBarProps) {
         <div className={styles.navItems}>{renderNavItems()}</div>
       </nav>
       <div className={styles.actions}>
+        <LanguageSwitcher currentLocale={currentLocale} />
         <ShoppingCart />
         {user ? (
           <UserMenu userData={user} logout={handleLogout} />
         ) : (
           <LoginButton onClick={login} />
         )}
-        <LanguageSwitcher currentLocale={currentLocale} />
         <div className={styles.menuButton}>
           <Squash
             toggled={menuState === "open"}
