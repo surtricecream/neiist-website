@@ -7,8 +7,8 @@ import { Toaster } from "sonner";
 import { UserProvider } from "@/context/UserContext";
 import { ShopProvider } from "@/context/ShopContext";
 import { getLocale, getDictionary } from "@/lib/i18n";
-import "@/styles/globals.css";
-import "@/styles/components/activities/ReactBigCalendar.css";
+//import "@/styles/globals.css";
+//import "@/styles/components/activities/ReactBigCalendar.css";
 
 const secularOne = Secular_One({
   subsets: ["latin"],
