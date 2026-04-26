@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { locales, Locale } from "@/lib/i18n-config";
+import { locales, Locale, localeNames } from "@/lib/i18n-config";
 import styles from "@/styles/components/layout/navbar/LanguageSwitcher.module.css";
 
 export default function LanguageSwitcher({ currentLocale }: { currentLocale: Locale }) {
@@ -43,7 +43,7 @@ export default function LanguageSwitcher({ currentLocale }: { currentLocale: Loc
               key={locale}
               className={styles.dropdownItem}
               onClick={() => switchLanguage(locale)}>
-              {locale === "en" ? "English (EN)" : "Português (PT)"}
+              {localeNames[locale]}
             </button>
           ))}
         </div>

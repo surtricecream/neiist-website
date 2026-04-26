@@ -70,7 +70,7 @@ export function proxy(req: NextRequest) {
 
   const cookieLocale = req.cookies.get("locale")?.value;
 
-  if (!cookieLocale || !locales.includes(cookieLocale)) {
+  if (!cookieLocale || !(locales as readonly string[]).includes(cookieLocale)) {
     const acceptLanguage = req.headers.get("accept-language");
     let bestLocale = defaultLocale;
 
@@ -83,7 +83,7 @@ export function proxy(req: NextRequest) {
         })
         .sort((a, b) => b.q - a.q);
 
-      const match = parsedLocales.find((l) => locales.includes(l.locale));
+      const match = parsedLocales.find((l) => (locales as readonly string[]).includes(l.locale));
       if (match) {
         bestLocale = match.locale;
       }
